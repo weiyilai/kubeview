@@ -20,6 +20,7 @@ env:
   BUILD_PLATFORM: linux/amd64,linux/arm64,darwin/arm64
 
 permissions:
+  contents: write
   packages: write
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
     name: Build and push images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set BUILD_INFO based on git log
         run: |
@@ -60,3 +61,65 @@ jobs:
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u USERNAME --password-stdin
           make image IMAGE_EXTRA_ARGS="--push"
+
+  # Matrix job for standalone binary
+  binary-build:
+    name: Build and upload binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+          - os: windows
+            arch: amd64
+          - os: windows
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set BUILD_INFO based on git log
+        run: |
+          echo BUILD_INFO="stable $(git log -1 --pretty=format:'%h %ad' --date=short)" >> ${GITHUB_ENV}
+
+      - run: |
+          echo ===== RELEASE ======
+          echo VERSION: $VERSION
+          echo BUILD_INFO: $BUILD_INFO
+          echo OS: ${{ matrix.os }}
+          echo ARCH: ${{ matrix.arch }}
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: make build
+
+      - name: Rename binary for release
+        run: |
+          SUFFIX=""
+          if [ "${{ matrix.os }}" = "windows" ]; then SUFFIX=".exe"; fi
+          cp bin/kubeview-${{ matrix.os }}-${{ matrix.arch }} kubeview-${{ matrix.os }}-${{ matrix.arch }}${SUFFIX}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: kubeview-${{ matrix.os }}-${{ matrix.arch }}-${{ env.VERSION }}
+          path: kubeview-${{ matrix.os }}-${{ matrix.arch }}*
+
+      - name: Upload release asset
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SUFFIX=""
+          if [ "${{ matrix.os }}" = "windows" ]; then SUFFIX=".exe"; fi
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "kubeview-${{ matrix.os }}-${{ matrix.arch }}${SUFFIX}" \
+            --clobber

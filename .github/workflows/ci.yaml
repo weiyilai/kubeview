@@ -1,4 +1,4 @@
-name: CI Lint & Build
+name: 'CI: Lint, Test & Build'
 
 on:
   push:
@@ -10,20 +10,23 @@ on:
 
 jobs:
   ci-job:
-    name: Lint & Build Job
+    name: Lint, Test & Build Job
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version: '1.26'
 
       - name: Run lint
         run: make lint
+
+      - name: Run tests
+        run: make test
 
       - name: Run build
         run: make build
